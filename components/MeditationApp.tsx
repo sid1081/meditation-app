@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, createContext, useContext, useEffect } from 'react';
-import { Calendar, Plus, BarChart, Loader2, LogIn, LogOut } from 'lucide-react';
-import { useSession, signIn, signOut } from 'next-auth/react';
+import { Calendar, Plus, BarChart, Loader2, LogOut } from 'lucide-react';
+import { useSession, signOut } from 'next-auth/react';
 import { Calendar as CalendarComponent } from "./ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
@@ -181,7 +181,7 @@ const MeditationApp = () => {
 
 const TrackerView = () => {
   const { sessions, addSession, date, setDate } = useContext(MeditationContext)!;
-  const { data: session } = useSession();
+  // const { data: session } = useSession();
   const [duration, setDuration] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -310,6 +310,7 @@ const AnalyticsView = () => {
 
   const getTotalStats = () => {
     return Object.entries(sessions).map(([userId, userSessions]) => {
+      console.log(userId);
       const totalDuration = Object.values(userSessions).reduce((sum, day) => sum + day.duration, 0);
       const totalSessions = Object.values(userSessions).reduce((sum, day) => sum + day.count, 0);
       const sessionData = Object.values(userSessions)[0];
