@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { MongoClient } from 'mongodb';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '../auth/[...nextauth]/route';
 
 const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/meditation';
 let client: MongoClient | null = null;
@@ -23,9 +25,24 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const session = await getServerSession(authOptions);
+    
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
     const db = await connect();
-    const result = await db.collection('sessions').insertOne(body);
+
+    const sessionData = {
+      ...body,
+      userId: session.user.id,
+      userEmail: session.user.email,
+      userName: session.user.name,
+      createdAt: new Date()
+    };
+
+    const result = await db.collection('sessions').insertOne(sessionData);
     return NextResponse.json(result);
   } catch (err) {
     return NextResponse.json({ error: 'Failed to add session', err }, { status: 500 });

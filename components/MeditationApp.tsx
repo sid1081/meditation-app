@@ -1,39 +1,40 @@
 'use client';
 
 import React, { useState, createContext, useContext, useEffect } from 'react';
-import { Calendar, Plus, BarChart, Loader2 } from 'lucide-react';
-import { Calendar as CalendarComponent } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Calendar, Plus, BarChart, Loader2, LogIn, LogOut } from 'lucide-react';
+import { useSession, signIn, signOut } from 'next-auth/react';
+import { Calendar as CalendarComponent } from "./ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Alert, AlertDescription } from "./ui/alert";
 import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { AuthForm } from './AuthForm';
+
+interface SessionData {
+  count: number;
+  duration: number;
+  userName?: string;
+}
 
 interface MeditationContextType {
-  sessions: Record<number, Record<string, { count: number; duration: number }>>;
-  addSession: (userId: number, sessionDate: Date, duration: string) => Promise<boolean>;
+  sessions: Record<string, Record<string, SessionData>>;
+  addSession: (sessionDate: Date, duration: string) => Promise<boolean>;
   date: Date;
   setDate: (date: Date) => void;
-  users: Array<{ id: number; name: string; color: string }>;
   isLoading: boolean;
 }
 
-const MeditationContext =  createContext<MeditationContextType | undefined>(undefined);
+const MeditationContext = createContext<MeditationContextType | undefined>(undefined);
 
 const MeditationApp = () => {
+  const { data: session } = useSession();
   const [activeView, setActiveView] = useState('tracker');
   const [date, setDate] = useState(new Date());
-  const [sessions, setSessions] = useState({});
+  const [sessions, setSessions] = useState<Record<string, Record<string, SessionData>>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const users = [
-    { id: 1, name: 'Sid', color: 'bg-purple-600' },
-    { id: 2, name: 'Roshani', color: 'bg-blue-600' },
-    { id: 3, name: 'Uday', color: 'bg-green-600' },
-    { id: 4, name: 'Kriti', color: 'bg-orange-600' }
-  ];
 
   useEffect(() => {
     fetchSessions();
@@ -47,16 +48,21 @@ const MeditationApp = () => {
       if (!response.ok) throw new Error('Failed to fetch sessions');
       
       const data = await response.json();
-      const sessionMap = {};
-      data.forEach(session => {
-        if (!sessionMap[session.userId]) {
-          sessionMap[session.userId] = {};
+      const sessionMap: Record<string, Record<string, SessionData>> = {};
+      data.forEach(meditationSession => {
+        const userId = meditationSession.userId;
+        if (!sessionMap[userId]) {
+          sessionMap[userId] = {};
         }
-        if (!sessionMap[session.userId][session.date]) {
-          sessionMap[session.userId][session.date] = { count: 0, duration: 0 };
+        if (!sessionMap[userId][meditationSession.date]) {
+          sessionMap[userId][meditationSession.date] = { 
+            count: 0, 
+            duration: 0,
+            userName: meditationSession.userName
+          };
         }
-        sessionMap[session.userId][session.date].count += 1;
-        sessionMap[session.userId][session.date].duration += session.duration;
+        sessionMap[userId][meditationSession.date].count += 1;
+        sessionMap[userId][meditationSession.date].duration += meditationSession.duration;
       });
       
       setSessions(sessionMap);
@@ -67,7 +73,11 @@ const MeditationApp = () => {
     }
   };
 
-  const addSession = async (userId, sessionDate, duration) => {
+  const addSession = async (sessionDate: Date, duration: string) => {
+    if (!session?.user) {
+      setError('Please sign in to add a session');
+      return false;
+    }
     try {
       const dateStr = sessionDate.toISOString().split('T')[0];
       const response = await fetch('/api/sessions', {
@@ -76,7 +86,6 @@ const MeditationApp = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          userId,
           date: dateStr,
           duration: parseInt(duration)
         })
@@ -106,16 +115,34 @@ const MeditationApp = () => {
     );
   }
 
+  const SignInView = () => {
+    return (
+      <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
+        <div className="bg-white rounded-lg shadow-sm p-8 w-full max-w-md">
+          <div className="flex items-center justify-center mb-8">
+            <Calendar className="h-8 w-8 text-purple-600 mr-3" />
+            <h1 className="text-2xl font-semibold">Meditation Tracker</h1>
+          </div>
+          <AuthForm onClose={() => {}} />
+        </div>
+      </div>
+    );
+  };
+
+  if (!session?.user) {
+    return <SignInView />;
+  }
+
   return (
-    <MeditationContext.Provider value={{ sessions, addSession, date, setDate, users, isLoading }}>
+    <MeditationContext.Provider value={{ sessions, addSession, date, setDate, isLoading }}>
       <div className="min-h-screen bg-gray-100">
         <nav className="bg-white border-b border-gray-200">
-          <div className="px-6 py-4 flex items-center justify-between">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4 sm:gap-0">
             <div className="flex items-center">
               <Calendar className="h-6 w-6 text-purple-600 mr-4" />
               <h1 className="text-xl font-semibold">Meditation Tracker</h1>
             </div>
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center flex-wrap justify-center sm:justify-end gap-2 sm:gap-4">
               <Button 
                 variant={activeView === 'tracker' ? 'default' : 'outline'}
                 onClick={() => setActiveView('tracker')}
@@ -129,13 +156,20 @@ const MeditationApp = () => {
                 <BarChart className="h-4 w-4 mr-2" />
                 Analytics
               </Button>
+              <Button variant="outline" onClick={() => signOut()}>
+                <LogOut className="h-4 w-4 mr-2" />
+                Sign Out
+              </Button>
             </div>
           </div>
         </nav>
 
         {isLoading ? (
-          <div className="h-[calc(100vh-4rem)] flex items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
+          <div className="flex-1 flex items-center justify-center p-8">
+            <div className="flex flex-col items-center gap-4">
+              <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
+              <p className="text-sm text-gray-500">Loading sessions...</p>
+            </div>
           </div>
         ) : (
           activeView === 'tracker' ? <TrackerView /> : <AnalyticsView />
@@ -146,22 +180,46 @@ const MeditationApp = () => {
 };
 
 const TrackerView = () => {
-  const { sessions, addSession, date, setDate, users } = useContext(MeditationContext)!;
+  const { sessions, addSession, date, setDate } = useContext(MeditationContext)!;
+  const { data: session } = useSession();
   const [duration, setDuration] = useState('');
-  const [selectedUser, setSelectedUser] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleAddSession = async () => {
     setIsSubmitting(true);
-    const success = await addSession(selectedUser, date, duration);
+    const success = await addSession(date, duration);
     if (success) {
       setDuration('');
     }
     setIsSubmitting(false);
   };
 
+  const getUniqueUsers = () => {
+    const userMap = new Map();
+    const colors = [
+      'bg-purple-600',
+      'bg-blue-600',
+      'bg-emerald-600',
+      'bg-orange-600'
+    ];
+    Object.entries(sessions).forEach(([userId, userSessions]) => {
+      const sessionData = Object.values(userSessions)[0];
+      if (sessionData) {
+        const colorIndex = userMap.size % colors.length;
+        userMap.set(userId, {
+          id: userId,
+          name: sessionData.userName || 'Unknown User',
+          color: colors[colorIndex]
+        });
+      }
+    });
+    return Array.from(userMap.values());
+  };
+
+  const users = getUniqueUsers();
+
   return (
-    <div className="p-6">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
       <div className="flex justify-end mb-6 space-x-4">
         <Popover>
           <PopoverTrigger asChild>
@@ -195,19 +253,6 @@ const TrackerView = () => {
               <DialogTitle>Add Meditation Session</DialogTitle>
             </DialogHeader>
             <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <label className="text-sm font-medium">Meditator</label>
-                <select 
-                  className="w-full p-2 border rounded-md"
-                  value={selectedUser}
-                  onChange={(e) => setSelectedUser(Number(e.target.value))}
-                  disabled={isSubmitting}
-                >
-                  {users.map(user => (
-                    <option key={user.id} value={user.id}>{user.name}</option>
-                  ))}
-                </select>
-              </div>
               <div className="grid gap-2">
                 <label className="text-sm font-medium">Duration (minutes)</label>
                 <Input
@@ -261,16 +306,16 @@ const TrackerView = () => {
 };
 
 const AnalyticsView = () => {
-  const { sessions, users } = useContext(MeditationContext)!;
+  const { sessions } = useContext(MeditationContext)!;
 
   const getTotalStats = () => {
-    return users.map(user => {
-      const userSessions = sessions[user.id] || {};
+    return Object.entries(sessions).map(([userId, userSessions]) => {
       const totalDuration = Object.values(userSessions).reduce((sum, day) => sum + day.duration, 0);
       const totalSessions = Object.values(userSessions).reduce((sum, day) => sum + day.count, 0);
+      const sessionData = Object.values(userSessions)[0];
       
       return {
-        name: user.name,
+        name: sessionData?.userName || 'Unknown User',
         totalMinutes: totalDuration,
         totalSessions: totalSessions,
         averageMinutes: totalSessions ? Math.round(totalDuration / totalSessions) : 0
@@ -279,8 +324,8 @@ const AnalyticsView = () => {
   };
 
   return (
-    <div className="p-6">
-      <div className="bg-white rounded-lg shadow-sm p-6">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+      <div className="bg-white rounded-lg shadow-sm p-6 lg:p-8">
         <h2 className="text-2xl font-semibold mb-6">Meditation Analytics</h2>
         
         <div className="h-96 mb-8">
@@ -299,7 +344,7 @@ const AnalyticsView = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {getTotalStats().map((stat, index) => (
-            <div key={index} className="bg-gray-50 rounded-lg p-4">
+            <div key={index} className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition-colors">
               <h3 className="font-medium mb-4">{stat.name}</h3>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
